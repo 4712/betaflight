@@ -17,7 +17,6 @@
 
 #pragma once
 
-void transponderInit(uint8_t* transponderCode);
 
 void transponderEnable(void);
 void transponderDisable(void);
