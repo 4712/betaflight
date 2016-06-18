@@ -24,7 +24,6 @@
 #include "build_config.h"
 #include "debug.h"
 #include "platform.h"
-#include "scheduler.h"
 
 #include "common/axis.h"
 #include "common/color.h"
@@ -60,6 +59,8 @@
 #include "io/vtx.h"
 
 #include "telemetry/telemetry.h"
+
+#include "scheduler/scheduler.h"
 
 #include "sensors/boardalignment.h"
 #include "sensors/sensors.h"
@@ -763,7 +764,7 @@ static bool processOutCommand(uint8_t cmdMSP)
         headSerialReply(18);
 
         // Hack scale due to choice of units for sensor data in multiwii
-        uint8_t scale = (acc_1G > 1024) ? 8 : 1;
+        uint8_t scale = (acc.acc_1G > 1024) ? 8 : 1;
 
         for (i = 0; i < 3; i++)
             serialize16(accSmooth[i] / scale);

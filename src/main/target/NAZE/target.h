@@ -26,6 +26,9 @@
 #define LED1    PB4 // PB4 (LED)
 
 #define BEEPER      PA12 // PA12 (Beeper)
+#ifdef AFROMINI
+#define BEEPER_INVERTED
+#endif
 
 #define BARO_XCLR_PIN    PC13
 #define BARO_EOC_PIN     PC14
@@ -108,6 +111,7 @@
 #define MAG_HMC5883_ALIGN CW180_DEG
 
 #define SONAR
+#define SONAR_CUSTOM_CONFIG
 #define DISPLAY
 
 #define USE_USART1
@@ -171,15 +175,18 @@
 #define USE_SERIAL_4WAY_BLHELI_INTERFACE
 
 // alternative defaults for AlienFlight F1 target
-#ifdef ALIENFLIGHT
+#ifdef ALIENFLIGHTF1
 #undef TARGET_BOARD_IDENTIFIER
 #define TARGET_BOARD_IDENTIFIER "AFF1" // AlienFlight F1.
 #undef BOARD_HAS_VOLTAGE_DIVIDER
+
+// alternative defaults for AlienFlight F1 target
 #define ALIENFLIGHT
+
+#define BRUSHED_MOTORS
 #define DEFAULT_FEATURES (FEATURE_RX_SERIAL | FEATURE_MOTOR_STOP)
 
 #define HARDWARE_BIND_PLUG
-
 // Hardware bind plug at PB5 (Pin 41)
 #define BINDPLUG_PIN   PB5
 #endif

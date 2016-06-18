@@ -14,13 +14,16 @@
  * You should have received a copy of the GNU General Public License
  * along with Cleanflight.  If not, see <http://www.gnu.org/licenses/>.
  */
-
 #pragma once
 
 #define TARGET_BOARD_IDENTIFIER "CHF3" // Chebuzz F3
 
 #define CONFIG_FASTLOOP_PREFERRED_ACC ACC_NONE
 
+#ifndef STM32F3DISCOVERY
+#define STM32F3DISCOVERY
+#endif 
+ 
 #define LED0    PE8 // Blue LEDs - PE8/PE12
 #define LED0_INVERTED
 #define LED1    PE10  // Orange LEDs - PE10/PE14
@@ -123,9 +126,9 @@
 #define TARGET_IO_PORTA 0xffff
 #define TARGET_IO_PORTB 0xffff
 #define TARGET_IO_PORTC 0xffff
-#define TARGET_IO_PORTD (BIT(2))
+#define TARGET_IO_PORTD (BIT(2)|BIT(10)|BIT(12)|BIT(13)|BIT(14)|BIT(15))
 #define TARGET_IO_PORTE 0xffff
-#define TARGET_IO_PORTF (BIT(0)|BIT(1)|BIT(4))
+#define TARGET_IO_PORTF (BIT(0)|BIT(1)|BIT(4)|BIT(9)|BIT(10))
 
 
 #define USED_TIMERS  (TIM_N(1) | TIM_N(2) | TIM_N(3) | TIM_N(4) | TIM_N(8) | TIM_N(15) | TIM_N(16) | TIM_N(17))

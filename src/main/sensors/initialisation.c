@@ -88,47 +88,11 @@ const extiConfig_t *selectMPUIntExtiConfig(void)
 #if defined(MPU_INT_EXTI)
     static const extiConfig_t mpuIntExtiConfig = { .io = IO_TAG(MPU_INT_EXTI) };
     return &mpuIntExtiConfig;
-#endif
-    
-#ifdef NAZE
-    // MPU_INT output on rev4 PB13
-    static const extiConfig_t nazeRev4MPUIntExtiConfig = {
-        .io = IO_TAG(PB13)
-    };
-    // MPU_INT output on rev5 hardware PC13
-    static const extiConfig_t nazeRev5MPUIntExtiConfig = {
-        .io = IO_TAG(PC13)
-    };
-
-#ifdef AFROMINI
-    return &nazeRev5MPUIntExtiConfig;
+#elif defined(USE_HARDWARE_REVISION_DETECTION) 
+    return selectMPUIntExtiConfigByHardwareRevision();
 #else
-    if (hardwareRevision < NAZE32_REV5) {
-        return &nazeRev4MPUIntExtiConfig;
-    }
-    else {
-        return &nazeRev5MPUIntExtiConfig;
-    }
-#endif
-#endif
-
-#ifdef ALIENFLIGHTF3
-    // MPU_INT output on V1 PA15
-    static const extiConfig_t alienFlightF3V1MPUIntExtiConfig = {
-        .io = IO_TAG(PA15)
-    };
-    // MPU_INT output on V2 PB13
-    static const extiConfig_t alienFlightF3V2MPUIntExtiConfig = {
-        .io = IO_TAG(PB13)
-    };
-    if (hardwareRevision == AFF3_REV_1) {
-        return &alienFlightF3V1MPUIntExtiConfig;
-    }
-    else {
-        return &alienFlightF3V2MPUIntExtiConfig;
-    }
-#endif
     return NULL;
+#endif    
 }
 
 #ifdef USE_FAKE_GYRO
@@ -663,8 +627,10 @@ bool sensorsAutodetect(sensorAlignmentConfig_t *sensorAlignmentConfig, uint8_t a
 
 
     // Now time to init things, acc first
-    if (sensors(SENSOR_ACC))
-        acc.init();
+    if (sensors(SENSOR_ACC)) {
+        acc.acc_1G = 256; // set default
+        acc.init(&acc);
+    }
     // this is safe because either mpu6050 or mpu3050 or lg3d20 sets it, and in case of fail, we never get here.
     gyroUpdateSampleRate(gyroLpf, gyroSyncDenominator);    // Set gyro refresh rate before initialisation
     gyro.init(gyroLpf);

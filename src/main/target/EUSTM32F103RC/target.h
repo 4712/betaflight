@@ -27,12 +27,12 @@
 
 #define USE_EXTI
 #define MPU6000_CS_GPIO       GPIOB
-#define MPU6000_CS_PIN        GPIO_Pin_12
+#define MPU6000_CS_PIN        PB12
 #define MPU6000_SPI_INSTANCE  SPI2
 
 #define MPU6500_CS_GPIO_CLK_PERIPHERAL   RCC_APB2Periph_GPIOB
 #define MPU6500_CS_GPIO       GPIOB
-#define MPU6500_CS_PIN        GPIO_Pin_12
+#define MPU6500_CS_PIN        PB12
 #define MPU6500_SPI_INSTANCE  SPI2
 
 #define GYRO
@@ -69,6 +69,8 @@
 #define MAG_AK8975_ALIGN CW180_DEG_FLIP
 
 #define SONAR
+#define SONAR_CUSTOM_CONFIG
+
 #define DISPLAY
 
 #define USE_USART1
@@ -109,7 +111,7 @@
 #define EXTERNAL1_ADC_GPIO_PIN      GPIO_Pin_5
 #define EXTERNAL1_ADC_CHANNEL       ADC_Channel_5
 
-#define LED_STRIP
+//#define LED_STRIP
 #define LED_STRIP_TIMER TIM3
 
 #define SPEKTRUM_BIND
