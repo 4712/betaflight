@@ -23,6 +23,8 @@
 
 #include "build_config.h"
 
+#include "blackbox/blackbox_io.h"
+
 #include "common/color.h"
 #include "common/axis.h"
 #include "common/maths.h"
@@ -169,7 +171,7 @@ static uint32_t activeFeaturesLatch = 0;
 static uint8_t currentControlRateProfileIndex = 0;
 controlRateConfig_t *currentControlRateProfile;
 
-static const uint8_t EEPROM_CONF_VERSION = 140;
+static const uint8_t EEPROM_CONF_VERSION = 141;
 
 static void resetAccelerometerTrims(flightDynamicsTrims_t *accelerometerTrims)
 {
@@ -180,29 +182,34 @@ static void resetAccelerometerTrims(flightDynamicsTrims_t *accelerometerTrims)
 
 static void resetPidProfile(pidProfile_t *pidProfile)
 {
-    pidProfile->pidController = 1;
+
+#if (defined(STM32F10X))
+    pidProfile->pidController = PID_CONTROLLER_INTEGER;
+#else
+    pidProfile->pidController = PID_CONTROLLER_FLOAT;
+#endif
 
     pidProfile->P8[ROLL] = 45;
     pidProfile->I8[ROLL] = 40;
-    pidProfile->D8[ROLL] = 15;
-    pidProfile->P8[PITCH] = 45;
+    pidProfile->D8[ROLL] = 18;
+    pidProfile->P8[PITCH] = 50;
     pidProfile->I8[PITCH] = 40;
-    pidProfile->D8[PITCH] = 15;
+    pidProfile->D8[PITCH] = 18;
     pidProfile->P8[YAW] = 90;
     pidProfile->I8[YAW] = 45;
     pidProfile->D8[YAW] = 20;
     pidProfile->P8[PIDALT] = 50;
     pidProfile->I8[PIDALT] = 0;
     pidProfile->D8[PIDALT] = 0;
-    pidProfile->P8[PIDPOS] = 15; // POSHOLD_P * 100;
-    pidProfile->I8[PIDPOS] = 0; // POSHOLD_I * 100;
+    pidProfile->P8[PIDPOS] = 15;   // POSHOLD_P * 100;
+    pidProfile->I8[PIDPOS] = 0;    // POSHOLD_I * 100;
     pidProfile->D8[PIDPOS] = 0;
-    pidProfile->P8[PIDPOSR] = 34; // POSHOLD_RATE_P * 10;
-    pidProfile->I8[PIDPOSR] = 14; // POSHOLD_RATE_I * 100;
-    pidProfile->D8[PIDPOSR] = 53; // POSHOLD_RATE_D * 1000;
-    pidProfile->P8[PIDNAVR] = 25; // NAV_P * 10;
-    pidProfile->I8[PIDNAVR] = 33; // NAV_I * 100;
-    pidProfile->D8[PIDNAVR] = 83; // NAV_D * 1000;
+    pidProfile->P8[PIDPOSR] = 34;  // POSHOLD_RATE_P * 10;
+    pidProfile->I8[PIDPOSR] = 14;  // POSHOLD_RATE_I * 100;
+    pidProfile->D8[PIDPOSR] = 53;  // POSHOLD_RATE_D * 1000;
+    pidProfile->P8[PIDNAVR] = 25;  // NAV_P * 10;
+    pidProfile->I8[PIDNAVR] = 33;  // NAV_I * 100;
+    pidProfile->D8[PIDNAVR] = 83;  // NAV_D * 1000;
     pidProfile->P8[PIDLEVEL] = 50;
     pidProfile->I8[PIDLEVEL] = 50;
     pidProfile->D8[PIDLEVEL] = 100;
@@ -214,8 +221,9 @@ static void resetPidProfile(pidProfile_t *pidProfile)
     pidProfile->yaw_p_limit = YAW_P_LIMIT_MAX;
     pidProfile->yaw_lpf_hz = 80;
     pidProfile->rollPitchItermIgnoreRate = 200;
-    pidProfile->yawItermIgnoreRate = 45;
-    pidProfile->dterm_lpf_hz = 110;    // filtering ON by default
+    pidProfile->yawItermIgnoreRate = 35;
+    pidProfile->dterm_lpf_hz = 50;    // filtering ON by default
+    pidProfile->deltaMethod = DELTA_FROM_ERROR;
     pidProfile->dynamic_pid = 1;
 
 #ifdef GTUNE
@@ -265,7 +273,7 @@ void resetEscAndServoConfig(escAndServoConfig_t *escAndServoConfig)
     escAndServoConfig->maxthrottle = 1850;
     escAndServoConfig->mincommand = 1000;
     escAndServoConfig->servoCenterPulse = 1500;
-    escAndServoConfig->escDesyncProtection = 10000;
+    escAndServoConfig->escDesyncProtection = 0;
 }
 
 void resetFlight3DConfig(flight3DConfig_t *flight3DConfig)
@@ -388,14 +396,14 @@ uint8_t getCurrentControlRateProfile(void)
     return currentControlRateProfileIndex;
 }
 
-static void setControlRateProfile(uint8_t profileIndex)	
-{		
-	currentControlRateProfileIndex = profileIndex;	
-	masterConfig.profile[getCurrentProfile()].activeRateProfile = profileIndex;	
-	currentControlRateProfile = &masterConfig.profile[getCurrentProfile()].controlRateProfile[profileIndex];		
+static void setControlRateProfile(uint8_t profileIndex)
+{
+    currentControlRateProfileIndex = profileIndex;
+    masterConfig.profile[getCurrentProfile()].activeRateProfile = profileIndex;
+    currentControlRateProfile = &masterConfig.profile[getCurrentProfile()].controlRateProfile[profileIndex];
 }
 
-controlRateConfig_t *getControlRateConfig(uint8_t profileIndex) 
+controlRateConfig_t *getControlRateConfig(uint8_t profileIndex)
 {
     return &masterConfig.profile[profileIndex].controlRateProfile[masterConfig.profile[profileIndex].activeRateProfile];
 }
@@ -489,10 +497,10 @@ static void resetConf(void)
     masterConfig.rxConfig.rssi_channel = 0;
     masterConfig.rxConfig.rssi_scale = RSSI_SCALE_DEFAULT;
     masterConfig.rxConfig.rssi_ppm_invert = 0;
-    masterConfig.rxConfig.rcSmoothing = 0;
+    masterConfig.rxConfig.rcSmoothInterval = 0; // 0 is predefined
     masterConfig.rxConfig.fpvCamAngleDegrees = 0;
 #ifdef STM32F4
-	masterConfig.rxConfig.max_aux_channel = 99;
+    masterConfig.rxConfig.max_aux_channel = 99;
 #else
     masterConfig.rxConfig.max_aux_channel = 6;
 #endif
@@ -530,10 +538,10 @@ static void resetConf(void)
 
 #ifdef GPS
     // gps/nav stuff
-    masterConfig.gpsConfig.provider = GPS_NMEA;
-    masterConfig.gpsConfig.sbasMode = SBAS_AUTO;
+    masterConfig.gpsConfig.provider   = GPS_NMEA;
+    masterConfig.gpsConfig.sbasMode   = SBAS_AUTO;
     masterConfig.gpsConfig.autoConfig = GPS_AUTOCONFIG_ON;
-    masterConfig.gpsConfig.autoBaud = GPS_AUTOBAUD_OFF;
+    masterConfig.gpsConfig.autoBaud   = GPS_AUTOBAUD_OFF;
 #endif
 
     resetSerialConfig(&masterConfig.serialConfig);
@@ -541,11 +549,11 @@ static void resetConf(void)
     masterConfig.emf_avoidance = 0; // TODO - needs removal
 
     resetPidProfile(&currentProfile->pidProfile);
-	
-	uint8_t rI;
-	for (rI = 0; rI<MAX_RATEPROFILES; rI++) {
-		resetControlRateConfig(&masterConfig.profile[0].controlRateProfile[rI]);
-	}
+    
+    uint8_t rI;
+    for (rI = 0; rI<MAX_RATEPROFILES; rI++) {
+        resetControlRateConfig(&masterConfig.profile[0].controlRateProfile[rI]);
+    }
     resetRollAndPitchTrims(&masterConfig.accelerometerTrims);
 
     masterConfig.mag_declination = 0;
@@ -609,13 +617,13 @@ static void resetConf(void)
     masterConfig.vtx_mhz = 5740;  //F0
 #endif
 
-#ifdef SPRACINGF3
-    masterConfig.blackbox_device = 1;
 #ifdef TRANSPONDER
     static const uint8_t defaultTransponderData[6] = { 0x12, 0x34, 0x56, 0x78, 0x9A, 0xBC }; // Note, this is NOT a valid transponder code, it's just for testing production hardware
 
     memcpy(masterConfig.transponderData, &defaultTransponderData, sizeof(defaultTransponderData));
 #endif
+
+#ifdef BLACKBOX
 
 #if defined(ENABLE_BLACKBOX_LOGGING_ON_SPIFLASH_BY_DEFAULT)
     featureSet(FEATURE_BLACKBOX);
@@ -624,13 +632,14 @@ static void resetConf(void)
     featureSet(FEATURE_BLACKBOX);
     masterConfig.blackbox_device = BLACKBOX_DEVICE_SDCARD;
 #else
-    masterConfig.blackbox_device = 0;
+    masterConfig.blackbox_device = BLACKBOX_DEVICE_SERIAL;
 #endif
 
     masterConfig.blackbox_rate_num = 1;
     masterConfig.blackbox_rate_denom = 1;
-#endif
 
+#endif // BLACKBOX
+    
     // alternative defaults settings for COLIBRI RACE targets
 #if defined(COLIBRI_RACE)
     masterConfig.escAndServoConfig.minthrottle = 1025;
@@ -645,20 +654,21 @@ static void resetConf(void)
     
 #if defined(ALIENFLIGHT) 
     featureClear(FEATURE_ONESHOT125);
-#ifdef ALIENFLIGHTF3
+#ifdef ALIENFLIGHTF1
+    masterConfig.serialConfig.portConfigs[1].functionMask = FUNCTION_RX_SERIAL;
+#else
     masterConfig.serialConfig.portConfigs[2].functionMask = FUNCTION_RX_SERIAL;
+#endif
+#ifdef ALIENFLIGHTF3
     masterConfig.batteryConfig.vbatscale = 20;
     masterConfig.mag_hardware = MAG_NONE;            // disabled by default
-#else
-    masterConfig.serialConfig.portConfigs[1].functionMask = FUNCTION_RX_SERIAL;
 #endif
-    masterConfig.rxConfig.serialrx_provider = 1;
+    masterConfig.rxConfig.serialrx_provider = SERIALRX_SPEKTRUM2048;
     masterConfig.rxConfig.spektrum_sat_bind = 5;
     masterConfig.rxConfig.spektrum_sat_bind_autoreset = 1;
     masterConfig.escAndServoConfig.minthrottle = 1000;
     masterConfig.escAndServoConfig.maxthrottle = 2000;
     masterConfig.motor_pwm_rate = 32000;
-    currentProfile->pidProfile.pidController = 2;
     masterConfig.failsafeConfig.failsafe_delay = 2;
     masterConfig.failsafeConfig.failsafe_off_delay = 0;
     currentControlRateProfile->rates[FD_PITCH] = 40;
@@ -678,10 +688,6 @@ static void resetConf(void)
 
 #if defined(SINGULARITY)
     // alternative defaults settings for SINGULARITY target
-    masterConfig.blackbox_device = 1;
-    masterConfig.blackbox_rate_num = 1;
-    masterConfig.blackbox_rate_denom = 1;
-    
     masterConfig.batteryConfig.vbatscale = 77;
 
     masterConfig.serialConfig.portConfigs[2].functionMask = FUNCTION_RX_SERIAL;
@@ -887,22 +893,22 @@ void validateAndFixConfig(void)
 #if defined(CC3D) && defined(SONAR) && defined(USE_SOFTSERIAL1) && defined(RSSI_ADC_GPIO)
     // shared pin
     if ((featureConfigured(FEATURE_SONAR) + featureConfigured(FEATURE_SOFTSERIAL) + featureConfigured(FEATURE_RSSI_ADC)) > 1) {
-    	featureClear(FEATURE_SONAR);
-    	featureClear(FEATURE_SOFTSERIAL);
-    	featureClear(FEATURE_RSSI_ADC);
+        featureClear(FEATURE_SONAR);
+        featureClear(FEATURE_SOFTSERIAL);
+        featureClear(FEATURE_RSSI_ADC);
     }
 #endif
 
 #if defined(COLIBRI_RACE)
     masterConfig.serialConfig.portConfigs[0].functionMask = FUNCTION_MSP;
     if(featureConfigured(FEATURE_RX_PARALLEL_PWM) || featureConfigured(FEATURE_RX_MSP)) {
-	    featureClear(FEATURE_RX_PARALLEL_PWM);
-	    featureClear(FEATURE_RX_MSP);
-	    featureSet(FEATURE_RX_PPM);
+        featureClear(FEATURE_RX_PARALLEL_PWM);
+        featureClear(FEATURE_RX_MSP);
+        featureSet(FEATURE_RX_PPM);
     }
     if(featureConfigured(FEATURE_RX_SERIAL)) {
-	    masterConfig.serialConfig.portConfigs[2].functionMask = FUNCTION_RX_SERIAL;
-	    //masterConfig.rxConfig.serialrx_provider = SERIALRX_SBUS;
+        masterConfig.serialConfig.portConfigs[2].functionMask = FUNCTION_RX_SERIAL;
+        //masterConfig.rxConfig.serialrx_provider = SERIALRX_SBUS;
     }
 #endif
 
@@ -980,11 +986,11 @@ void writeEEPROM(void)
         for (wordOffset = 0; wordOffset < sizeof(master_t); wordOffset += 4) {
             if (wordOffset % FLASH_PAGE_SIZE == 0) {
 #if defined(STM32F40_41xxx)
-	            status = FLASH_EraseSector(FLASH_Sector_8, VoltageRange_3); //0x08080000 to 0x080A0000
+                status = FLASH_EraseSector(FLASH_Sector_8, VoltageRange_3); //0x08080000 to 0x080A0000
 #elif defined (STM32F411xE)
-	            status = FLASH_EraseSector(FLASH_Sector_7, VoltageRange_3); //0x08060000 to 0x08080000
+                status = FLASH_EraseSector(FLASH_Sector_7, VoltageRange_3); //0x08060000 to 0x08080000
 #else
-	            status = FLASH_ErasePage(CONFIG_START_FLASH_ADDRESS + wordOffset);
+                status = FLASH_ErasePage(CONFIG_START_FLASH_ADDRESS + wordOffset);
 #endif
                 if (status != FLASH_COMPLETE) {
                     break;
@@ -1040,12 +1046,12 @@ void changeProfile(uint8_t profileIndex)
     beeperConfirmationBeeps(profileIndex + 1);
 }
 
-void changeControlRateProfile(uint8_t profileIndex) {		
-	if (profileIndex > MAX_RATEPROFILES) {		
-		profileIndex = MAX_RATEPROFILES - 1;		
-	}		
-	setControlRateProfile(profileIndex);		
-	activateControlRateConfig();		
+void changeControlRateProfile(uint8_t profileIndex) {    
+    if (profileIndex > MAX_RATEPROFILES) {    
+        profileIndex = MAX_RATEPROFILES - 1;    
+    }        
+    setControlRateProfile(profileIndex);    
+    activateControlRateConfig();    
 }
 
 void handleOneshotFeatureChangeOnRestart(void)

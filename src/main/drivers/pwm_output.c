@@ -19,6 +19,7 @@
 #include <stdint.h>
 
 #include <stdlib.h>
+#include <math.h>
 
 #include "platform.h"
 
@@ -94,7 +95,7 @@ static pwmOutputPort_t *pwmOutConfig(const timerHardware_t *timerHardware, uint8
     pwmOutputPort_t *p = &pwmOutputPorts[allocatedOutputPortCount++];
 
     configTimeBase(timerHardware->tim, period, mhz);
-    pwmGPIOConfig(timerHardware->pin, IOCFG_AF_PP);
+    pwmGPIOConfig(timerHardware->tag, IOCFG_AF_PP);
 
     pwmOCConfig(timerHardware->tim, timerHardware->channel, value, timerHardware->outputInverted);
 
@@ -135,7 +136,7 @@ static void pwmWriteStandard(uint8_t index, uint16_t value)
 
 static void pwmWriteMultiShot(uint8_t index, uint16_t value)
 {
-    *motors[index]->ccr = 60001 * (value - 1000) / 250000 + 60;
+    *motors[index]->ccr = lrintf(((float)(value-1000) / 0.69444f) + 360);
 }
 
 void pwmWriteMotor(uint8_t index, uint16_t value)
@@ -169,12 +170,11 @@ void pwmCompleteOneshotMotorUpdate(uint8_t motorCount)
     uint8_t index;
     TIM_TypeDef *lastTimerPtr = NULL;
 
-    for(index = 0; index < motorCount; index++){
+    for (index = 0; index < motorCount; index++) {
 
         // Force the timer to overflow if it's the first motor to output, or if we change timers
-        if(motors[index]->tim != lastTimerPtr){
+        if (motors[index]->tim != lastTimerPtr) {
             lastTimerPtr = motors[index]->tim;
-
             timerForceOverflow(motors[index]->tim);
         }
 
@@ -184,10 +184,10 @@ void pwmCompleteOneshotMotorUpdate(uint8_t motorCount)
     }
 }
 
-void pwmBrushedMotorConfig(const timerHardware_t *timerHardware, uint8_t motorIndex, uint16_t motorPwmRate, uint16_t idlePulse)
+void pwmBrushedMotorConfig(const timerHardware_t *timerHardware, uint8_t motorIndex, uint16_t motorPwmRate)
 {
     uint32_t hz = PWM_BRUSHED_TIMER_MHZ * 1000000;
-    motors[motorIndex] = pwmOutConfig(timerHardware, PWM_BRUSHED_TIMER_MHZ, hz / motorPwmRate, idlePulse);
+    motors[motorIndex] = pwmOutConfig(timerHardware, PWM_BRUSHED_TIMER_MHZ, hz / motorPwmRate, 0);
     motors[motorIndex]->pwmWritePtr = pwmWriteBrushed;
 }
 
