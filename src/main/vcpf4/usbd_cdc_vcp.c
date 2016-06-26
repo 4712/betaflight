@@ -153,11 +153,12 @@ static uint16_t VCP_Ctrl(uint32_t Cmd, uint8_t* Buf, uint32_t Len)
  *******************************************************************************/
 uint32_t CDC_Send_DATA(uint8_t *ptrBuffer, uint8_t sendLength)
 {
-    if (USB_Tx_State) 
-        return 0;
-
-    VCP_DataTx(ptrBuffer, sendLength);
-    return sendLength;
+    if(USB_Tx_State!=1)
+    {
+        VCP_DataTx(ptrBuffer,sendLength);
+        return sendLength;
+    }
+    return 0;
 }
 
 /**
@@ -170,6 +171,7 @@ uint32_t CDC_Send_DATA(uint8_t *ptrBuffer, uint8_t sendLength)
  */
 static uint16_t VCP_DataTx(uint8_t* Buf, uint32_t Len)
 {
+
     uint16_t ptr = APP_Rx_ptr_in;
     uint32_t i;
 
@@ -177,7 +179,7 @@ static uint16_t VCP_DataTx(uint8_t* Buf, uint32_t Len)
         APP_Rx_Buffer[ptr++ & (APP_RX_DATA_SIZE-1)] = Buf[i];
 
     APP_Rx_ptr_in = ptr % APP_RX_DATA_SIZE;
-    
+
     return USBD_OK;
 }
 
