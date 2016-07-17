@@ -388,9 +388,7 @@ static uint8_t testi;
 
 static void WriteByte(uint8_t b)
 {
-    serialBeginWrite(port);
     serialWrite(port, b);
-    serialEndWrite(port);
 }
 
 static uint8_16_u CRCout;
