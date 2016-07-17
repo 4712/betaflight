@@ -67,11 +67,11 @@
 
 #define SERIAL_4WAY_INTERFACE_NAME_STR "m4wFCIntf"
 // *** change to adapt Revision
-#define SERIAL_4WAY_VER_MAIN 14
-#define SERIAL_4WAY_VER_SUB_1 (uint8_t) 4
-#define SERIAL_4WAY_VER_SUB_2 (uint8_t) 04
+#define SERIAL_4WAY_VER_MAIN  16
+#define SERIAL_4WAY_VER_SUB_1 2
+#define SERIAL_4WAY_VER_SUB_2 0
+#define SERIAL_4WAY_PROTOCOL_VER 107
 
-#define SERIAL_4WAY_PROTOCOL_VER 106
 // *** end
 
 #if (SERIAL_4WAY_VER_MAIN > 24)
@@ -264,6 +264,7 @@ void esc4wayRelease(void)
 
 #define ACK_I_INVALID_CHANNEL   0x08
 #define ACK_I_INVALID_PARAM     0x09
+#define Ack_I_INVALID_PACKAGE   0x0A
 #define ACK_D_GENERAL_ERROR     0x0F
 
 /* Copyright (c) 2002, 2003, 2004  Marek Michalkiewicz
@@ -362,25 +363,34 @@ static uint8_t Connect(uint8_32_u *pDeviceInfo)
 }
 
 static serialPort_t *port;
-
-static uint8_t ReadByte(void) 
-{
-    // need timeout?
-    while (!serialRxBytesWaiting(port));
-    return serialRead(port);
-}
+#define READ_BYTE_TIMEOUT 100
 
 static uint8_16_u CRC_in;
-static uint8_t ReadByteCrc(void)
+
+static bool ReadByteCrc(uint8_t *rxByte)
 {
-    uint8_t b = ReadByte();
-    CRC_in.word = _crc_xmodem_update(CRC_in.word, b);
-    return b;
+    // get byte if available
+    if (!serialRxBytesWaiting(port)){
+        uint32_t timeout_timer = millis() + READ_BYTE_TIMEOUT;
+        while (!serialRxBytesWaiting(port)){
+            if (millis() > timeout_timer) {
+                *rxByte = 0;
+                return false;
+            }
+        }
+    }
+    *rxByte = serialRead(port);
+    CRC_in.word = _crc_xmodem_update(CRC_in.word, *rxByte);
+    return true;
 }
+
+static uint8_t testi;
 
 static void WriteByte(uint8_t b)
 {
+    serialBeginWrite(port);
     serialWrite(port, b);
+    serialEndWrite(port);
 }
 
 static uint8_16_u CRCout;
@@ -398,12 +408,13 @@ void esc4wayProcess(serialPort_t *mspPort)
     uint8_t I_PARAM_LEN;
     uint8_t CMD;
     uint8_t ACK_OUT;
-    uint8_16_u CRC_check;
+    //uint8_16_u CRC_check;
     uint8_16_u Dummy;
     uint8_t O_PARAM_LEN;
     uint8_t *O_PARAM;
     uint8_t *InBuff;
     ioMem_t ioMem;
+
 
     port = mspPort;
 
@@ -414,12 +425,13 @@ void esc4wayProcess(serialPort_t *mspPort)
     beeperSilence();
     #endif
     bool isExitScheduled = false;
-
+    uint8_t invalidPackageCounter = 0;
+    testi = 0;
     while(1) {
         // restart looking for new sequence from host
         do {
             CRC_in.word = 0;
-            ESC = ReadByteCrc();
+            ReadByteCrc(&ESC); // retuns 0 on timeout
         } while (ESC != cmd_Local_Escape);
 
         RX_LED_ON;
@@ -427,28 +439,37 @@ void esc4wayProcess(serialPort_t *mspPort)
         Dummy.word = 0;
         O_PARAM = &Dummy.bytes[0];
         O_PARAM_LEN = 1;
-        CMD = ReadByteCrc();
-        ioMem.D_FLASH_ADDR_H = ReadByteCrc();
-        ioMem.D_FLASH_ADDR_L = ReadByteCrc();
-        I_PARAM_LEN = ReadByteCrc();
+        ACK_OUT = Ack_I_INVALID_PACKAGE;
 
-        InBuff = ParamBuf;
-        uint8_t i = I_PARAM_LEN;
-        do {
-          *InBuff = ReadByteCrc();
-          InBuff++;
-          i--;
-        } while (i != 0);
+        if (ReadByteCrc(&CMD) \
+                && ReadByteCrc(&ioMem.D_FLASH_ADDR_H) \
+                && ReadByteCrc(&ioMem.D_FLASH_ADDR_L) \
+                && ReadByteCrc(&I_PARAM_LEN)) {
+           InBuff = ParamBuf;
 
-        CRC_check.bytes[1] = ReadByte();
-        CRC_check.bytes[0] = ReadByte();
+           uint8_t i = I_PARAM_LEN;
+           do {
+               ReadByteCrc(InBuff);
+               InBuff++;
+               i--;
+           } while (i != 0);
 
+           if ((i == 0) && ReadByteCrc(&i) && ReadByteCrc(&i)) {
+               if(CRC_in.word == 0) {
+                   ACK_OUT = ACK_OK;
+
+               } else {
+                   ACK_OUT = ACK_I_INVALID_CRC;
+               }
+           }
+        }
         RX_LED_OFF;
 
-        if(CRC_check.word == CRC_in.word) {
-            ACK_OUT = ACK_OK;
-        } else {
-            ACK_OUT = ACK_I_INVALID_CRC;
+        if (ACK_OUT == Ack_I_INVALID_PACKAGE) {
+            invalidPackageCounter++;
+            if (invalidPackageCounter > 3) {
+                isExitScheduled = true;
+            }
         }
 
         if (ACK_OUT == ACK_OK)
@@ -794,14 +815,14 @@ void esc4wayProcess(serialPort_t *mspPort)
         CRCout.word = 0;
 
         TX_LED_ON;
-        serialBeginWrite(port);
+        //serialBeginWrite(port);
         WriteByteCrc(cmd_Remote_Escape);
         WriteByteCrc(CMD);
         WriteByteCrc(ioMem.D_FLASH_ADDR_H);
         WriteByteCrc(ioMem.D_FLASH_ADDR_L);
         WriteByteCrc(O_PARAM_LEN);
 
-        i=O_PARAM_LEN;
+        uint8_t i = O_PARAM_LEN;
         do {
             WriteByteCrc(*O_PARAM);
             O_PARAM++;
@@ -811,7 +832,7 @@ void esc4wayProcess(serialPort_t *mspPort)
         WriteByteCrc(ACK_OUT);
         WriteByte(CRCout.bytes[1]);
         WriteByte(CRCout.bytes[0]);
-        serialEndWrite(port);
+       // serialEndWrite(port);
         TX_LED_OFF;
         if (isExitScheduled) {
             esc4wayRelease();
