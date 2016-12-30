@@ -205,9 +205,18 @@ pwmOutputConfiguration_t *pwmInit(drv_pwm_config_t *init)
                 type = MAP_TO_SERVO_OUTPUT;
 #endif
 
-#if defined(COLIBRI_RACE) || defined(LUX_RACE)
+#if defined(LUX_RACE)
             // remap PWM1+2 as servos
             if ((timerIndex == PWM6 || timerIndex == PWM7 || timerIndex == PWM8 || timerIndex == PWM9) && timerHardwarePtr->tim == TIM2)
+                type = MAP_TO_SERVO_OUTPUT;
+#endif
+
+#if defined(COLIBRI_RACE)
+            // remap PWM6-9 as servos
+            if ((timerIndex >= PWM6 || timerIndex <= PWM9) && timerHardwarePtr->tim == TIM2)
+                type = MAP_TO_SERVO_OUTPUT;
+            // remap PWM10+11 as servos
+            if ((timerIndex == PWM10 || timerIndex == PWM11) && timerHardwarePtr->tim == TIM15)
                 type = MAP_TO_SERVO_OUTPUT;
 #endif
 
@@ -227,6 +236,23 @@ pwmOutputConfiguration_t *pwmInit(drv_pwm_config_t *init)
             // remap PWM15+16 as servos
             if ((timerIndex == PWM15 || timerIndex == PWM16) && timerHardwarePtr->tim == TIM15)
                 type = MAP_TO_SERVO_OUTPUT;
+#endif
+
+#if defined(X_RACERSPI)
+            // skip UART2 ports when necessary
+            if (init->useUART2) {
+                // this board maps UART2 and PWM13,PWM14 to the same pins
+                if (timerIndex == PWM13 || timerIndex == PWM14)
+                    continue;
+
+                // remap PWM5+6 as servos when using UART2 .. except if softserial1, but that's caught above
+                if ((timerIndex == PWM5 || timerIndex == PWM6) && timerHardwarePtr->tim == TIM3)
+                    type = MAP_TO_SERVO_OUTPUT;
+            } else {
+                // remap PWM13+14 as servos
+                if ((timerIndex == PWM13 || timerIndex == PWM14) && timerHardwarePtr->tim == TIM15)
+                    type = MAP_TO_SERVO_OUTPUT;
+            }
 #endif
 
 #if defined(SPRACINGF3MINI) || defined(OMNIBUS)
@@ -286,7 +312,12 @@ pwmOutputConfiguration_t *pwmInit(drv_pwm_config_t *init)
                 // remap PWM5..8 as servos when used in extended servo mode
                 if (timerIndex >= PWM5 && timerIndex <= PWM8)
                     type = MAP_TO_SERVO_OUTPUT;
+#elif defined(X_RACERSPI)
+                // remap PWM3..6 as servos when used in extended servo mode
+                if (timerIndex >= PWM3 && timerIndex <= PWM6)
+                    type = MAP_TO_SERVO_OUTPUT;
 #endif
+
         }
 
 #endif // USE_SERVOS

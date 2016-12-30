@@ -106,7 +106,7 @@ void biquadFilterInit(biquadFilter_t *filter, float filterFreq, uint32_t refresh
     filter->d1 = filter->d2 = 0;
 }
 
-/* Computes a biquad_t filter on a sample */
+/* Computes a biquadFilter_t filter on a sample */
 float biquadFilterApply(biquadFilter_t *filter, float input)
 {
     const float result = filter->b0 * input + filter->d1;
@@ -115,25 +115,21 @@ float biquadFilterApply(biquadFilter_t *filter, float input)
     return result;
 }
 
-int32_t filterApplyAverage(int32_t input, uint8_t averageCount, int32_t averageState[DELTA_MAX_SAMPLES]) {
-    int count;
-    int32_t averageSum = 0;
-
-    for (count = averageCount-1; count > 0; count--) averageState[count] = averageState[count-1];
-    averageState[0] = input;
-    for (count = 0; count < averageCount; count++) averageSum += averageState[count];
-
-    return averageSum / averageCount;
+void initFirFilter(firFilterState_t *filter, uint8_t gyroSoftLpfHz, uint16_t targetLooptime) {
+    filter->targetCount = constrain(lrintf((1.0f / (0.000001f * (float)targetLooptime)) / gyroSoftLpfHz), 1, MAX_DENOISE_WINDOW_SIZE);
 }
 
-float filterApplyAveragef(float input, uint8_t averageCount, float averageState[DELTA_MAX_SAMPLES]) {
-    int count;
-    float averageSum = 0.0f;
+/* prototype function for denoising of signal by dynamic moving average. Mainly for test purposes */
+float firFilterUpdate(firFilterState_t *filter, float input) {
+    filter->state[filter->index] = input;
+    filter->movingSum += filter->state[filter->index++];
+    if (filter->index == filter->targetCount)
+        filter->index = 0;
+    filter->movingSum -= filter->state[filter->index];
 
-    for (count = averageCount-1; count > 0; count--) averageState[count] = averageState[count-1];
-    averageState[0] = input;
-    for (count = 0; count < averageCount; count++) averageSum += averageState[count];
-
-    return averageSum / averageCount;
+    if (filter->targetCount >= filter->filledCount)
+        return filter->movingSum / filter->targetCount;
+    else
+        return filter->movingSum / ++filter->filledCount + 1;
 }
 

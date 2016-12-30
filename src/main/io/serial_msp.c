@@ -526,7 +526,7 @@ void mspInit(serialConfig_t *serialConfig)
 #endif
 
     activeBoxIds[activeBoxIdCount++] = BOXFPVANGLEMIX;
-    
+
     if (feature(FEATURE_3D)) {
     	activeBoxIds[activeBoxIdCount++] = BOX3DDISABLESWITCH;
     }
@@ -538,11 +538,11 @@ void mspInit(serialConfig_t *serialConfig)
     if (feature(FEATURE_INFLIGHT_ACC_CAL)) {
         activeBoxIds[activeBoxIdCount++] = BOXCALIB;
     }
-	
+
     if (feature(FEATURE_OSD)) {
 	activeBoxIds[activeBoxIdCount++] = BOXOSD;
     }
-	
+
 #ifdef TELEMETRY
     if (feature(FEATURE_TELEMETRY) && masterConfig.telemetryConfig.telemetry_switch) {
         activeBoxIds[activeBoxIdCount++] = BOXTELEMETRY;
@@ -1197,10 +1197,16 @@ static bool processOutCommand(uint8_t cmdMSP)
 
     case MSP_OSD_CONFIG:
 #ifdef OSD
-        headSerialReply(2 + (OSD_MAX_ITEMS * 2));
+        headSerialReply(10 + (OSD_MAX_ITEMS * 2));
         serialize8(1); // OSD supported
         // send video system (AUTO/PAL/NTSC)
         serialize8(masterConfig.osdProfile.video_system);
+        serialize8(masterConfig.osdProfile.units);
+        serialize8(masterConfig.osdProfile.rssi_alarm);
+        serialize16(masterConfig.osdProfile.cap_alarm);
+        serialize16(masterConfig.osdProfile.time_alarm);
+        serialize16(masterConfig.osdProfile.alt_alarm);
+
         for (i = 0; i < OSD_MAX_ITEMS; i++) {
             serialize16(masterConfig.osdProfile.item_pos[i]);
         }
@@ -1252,14 +1258,16 @@ static bool processOutCommand(uint8_t cmdMSP)
         serialize16(masterConfig.motor_pwm_rate);
         break;
     case MSP_FILTER_CONFIG :
-        headSerialReply(13);
+        headSerialReply(17);
         serialize8(masterConfig.gyro_soft_lpf_hz);
         serialize16(currentProfile->pidProfile.dterm_lpf_hz);
         serialize16(currentProfile->pidProfile.yaw_lpf_hz);
-        serialize16(masterConfig.gyro_soft_notch_hz);
-        serialize16(masterConfig.gyro_soft_notch_cutoff);
+        serialize16(masterConfig.gyro_soft_notch_hz_1);
+        serialize16(masterConfig.gyro_soft_notch_cutoff_1);
         serialize16(currentProfile->pidProfile.dterm_notch_hz);
         serialize16(currentProfile->pidProfile.dterm_notch_cutoff);
+        serialize16(masterConfig.gyro_soft_notch_hz_2);
+        serialize16(masterConfig.gyro_soft_notch_cutoff_2);
         break;
     case MSP_PID_ADVANCED:
         headSerialReply(17);
@@ -1268,7 +1276,7 @@ static bool processOutCommand(uint8_t cmdMSP)
         serialize16(currentProfile->pidProfile.yaw_p_limit);
         serialize8(currentProfile->pidProfile.deltaMethod);
         serialize8(currentProfile->pidProfile.vbatPidCompensation);
-        serialize8(currentProfile->pidProfile.ptermSRateWeight);
+        serialize8(currentProfile->pidProfile.setpointRelaxRatio);
         serialize8(currentProfile->pidProfile.dtermSetpointWeight);
         serialize8(0); // reserved
         serialize8(0); // reserved
@@ -1581,6 +1589,11 @@ static bool processInCommand(void)
         // set all the other settings
         if ((int8_t)addr == -1) {
             masterConfig.osdProfile.video_system = read8();
+            masterConfig.osdProfile.units = read8();
+            masterConfig.osdProfile.rssi_alarm = read8();
+            masterConfig.osdProfile.cap_alarm = read16();
+            masterConfig.osdProfile.time_alarm = read16();
+            masterConfig.osdProfile.alt_alarm = read16();
         }
         // set a position setting
         else {
@@ -1592,7 +1605,7 @@ static bool processInCommand(void)
         for (i = 0; i < 54; i++) {
             font_data[i] = read8();
         }
-        max7456_write_nvm(addr, font_data);
+        max7456WriteNvm(addr, font_data);
         break;
 #endif
 
@@ -1854,10 +1867,14 @@ static bool processInCommand(void)
         currentProfile->pidProfile.dterm_lpf_hz = read16();
         currentProfile->pidProfile.yaw_lpf_hz = read16();
         if (currentPort->dataSize > 5) {
-            masterConfig.gyro_soft_notch_hz = read16();
-            masterConfig.gyro_soft_notch_cutoff = read16();
+            masterConfig.gyro_soft_notch_hz_1 = read16();
+            masterConfig.gyro_soft_notch_cutoff_1 = read16();
             currentProfile->pidProfile.dterm_notch_hz = read16();
             currentProfile->pidProfile.dterm_notch_cutoff = read16();
+        }
+        if (currentPort->dataSize > 13) {
+            masterConfig.gyro_soft_notch_hz_2 = read16();
+            masterConfig.gyro_soft_notch_cutoff_2 = read16();
         }
         break;
     case MSP_SET_PID_ADVANCED:
@@ -1866,7 +1883,7 @@ static bool processInCommand(void)
         currentProfile->pidProfile.yaw_p_limit = read16();
         currentProfile->pidProfile.deltaMethod = read8();
         currentProfile->pidProfile.vbatPidCompensation = read8();
-        currentProfile->pidProfile.ptermSRateWeight = read8();
+        currentProfile->pidProfile.setpointRelaxRatio = read8();
         currentProfile->pidProfile.dtermSetpointWeight = read8();
         read8(); // reserved
         read8(); // reserved
@@ -1879,7 +1896,7 @@ static bool processInCommand(void)
         masterConfig.baro_hardware = read8();
         masterConfig.mag_hardware = read8();
         break;
-       
+
     case MSP_SET_NAME:
         memset(masterConfig.name, 0, ARRAYLEN(masterConfig.name));
         for (i = 0; i < MIN(MAX_NAME_LENGTH, currentPort->dataSize); i++) {

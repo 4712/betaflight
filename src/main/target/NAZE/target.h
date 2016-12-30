@@ -17,7 +17,6 @@
 
 #pragma once
 
-#define TARGET_BOARD_IDENTIFIER "AFNA" // AFroNAze - NAZE might be considered misleading on Naze clones like the flip32.
 #define USE_HARDWARE_REVISION_DETECTION
 
 #define BOARD_HAS_VOLTAGE_DIVIDER
@@ -26,8 +25,17 @@
 #define LED1                    PB4
 
 #define BEEPER                  PA12
-#ifdef AFROMINI
+
+#if defined(AFROMINI)
 #define BEEPER_INVERTED
+#define TARGET_BOARD_IDENTIFIER "AFMN"
+#elif defined(BEEBRAIN)
+#define BRUSHED_MOTORS
+#define TARGET_BOARD_IDENTIFIER "BEBR"
+#define TARGET_CONFIG
+#define DEFAULT_FEATURES FEATURE_MOTOR_STOP
+#else
+#define TARGET_BOARD_IDENTIFIER "AFNA"
 #endif
 
 #define BARO_XCLR_PIN           PC13
@@ -95,14 +103,14 @@
 #define ACC_BMA280_ALIGN        CW0_DEG
 #define ACC_MPU6500_ALIGN       CW0_DEG
 
-#define BARO
-#define USE_BARO_MS5611
-#define USE_BARO_BMP085
-#define USE_BARO_BMP280
+//#define BARO
+//#define USE_BARO_MS5611
+//#define USE_BARO_BMP085
+//#define USE_BARO_BMP280
 
-#define MAG
-#define USE_MAG_HMC5883
-#define MAG_HMC5883_ALIGN       CW180_DEG
+//#define MAG
+//#define USE_MAG_HMC5883
+//#define MAG_HMC5883_ALIGN       CW180_DEG
 
 //#define SONAR
 //#define SONAR_TRIGGER_PIN       PB0
@@ -156,6 +164,8 @@
 #define BIND_PIN                PA3
 
 #define USE_SERIAL_4WAY_BLHELI_INTERFACE
+
+#define DEFAULT_RX_FEATURE      FEATURE_RX_PPM
 
 // IO - assuming all IOs on 48pin package
 #define TARGET_IO_PORTA         0xffff
