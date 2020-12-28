@@ -78,7 +78,8 @@
 #define SERIAL_4WAY_VER_SUB_1 (uint8_t) 0
 #define SERIAL_4WAY_VER_SUB_2 (uint8_t) 05
 
-#define SERIAL_4WAY_PROTOCOL_VER 108
+#define SERIAL_4WAY_PROTOCOL_VER 200 
+// protocol ver >=200 includes baud rate switch (ESC production only, for safety reasons)
 // *** end
 
 #if (SERIAL_4WAY_VER_MAIN > 24)
@@ -267,6 +268,10 @@ void esc4wayRelease(void)
 //PARAM: uint8_t ADRESS_Hi + ADRESS_Lo + BUffLen + Buffer[0..255]
 //RETURN: ACK
 
+//Set baud rate up to 115200 baud // ESC production only
+#define cmd_DeviceSetBaudRate 0x4A   // 'J' write
+// PARAM: uint8_t baud_idx
+// RETURN: ACK
 
 // responses
 #define ACK_OK                  0x00
@@ -858,6 +863,28 @@ void esc4wayProcess(serialPort_t *mspPort)
                                 default:
                                     ACK_OUT = ACK_D_GENERAL_ERROR;
                                     break;
+                            }
+                            break;
+                        }
+                        default:
+                        {
+                            ACK_OUT = ACK_I_INVALID_CMD;
+                            break;
+                        }
+                    }
+                    break;
+                }
+               
+                case cmd_DeviceSetBaudRate:
+                {
+                    switch (CurrentInterfaceMode)
+                    {
+                        case imARM_BLB:
+                        {
+                            if (BL_SendCMDSetBaudRate(ParamBuf[0])){
+                                ACK_OUT = ACK_OK;
+                            } else {
+                                ACK_OUT = ACK_D_GENERAL_ERROR;
                             }
                             break;
                         }

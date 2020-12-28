@@ -42,3 +42,4 @@ uint8_t BL_WriteFlash(ioMem_t *pMem);
 uint8_t BL_ReadFlash(uint8_t interface_mode, ioMem_t *pMem);
 uint8_t BL_VerifyFlash(ioMem_t *pMem);
 void BL_SendCMDRunRestartBootloader(uint8_32_u *pDeviceInfo);
+uint8_t BL_SendCMDSetBaudRate(uint8_t baud_idx);

@@ -36,6 +36,7 @@
 #include "drivers/serial.h"
 #include "drivers/time.h"
 #include "drivers/timer.h"
+#include "drivers/system.h"
 
 #include "io/serial.h"
 #include "io/serial_4way.h"
@@ -59,6 +60,7 @@
 #define CMD_PROG_EEPROM     0x05
 #define CMD_READ_SRAM       0x06
 #define CMD_READ_FLASH_ATM  0x07
+#define CMD_SET_BAUD_RATE   0xFC
 #define CMD_KEEP_ALIVE      0xFD
 #define CMD_SET_ADDRESS     0xFF
 #define CMD_SET_BUFFER      0xFE
@@ -68,11 +70,42 @@
 
 #define START_BIT_TIMEOUT_MS 2
 
-#define BIT_TIME (52)       // 52uS
-#define BIT_TIME_HALVE      (BIT_TIME >> 1) // 26uS
-#define BIT_TIME_3_4        (BIT_TIME_HALVE + (BIT_TIME_HALVE >> 1))   // 39uS
-#define START_BIT_TIME      (BIT_TIME_3_4)
-//#define STOP_BIT_TIME     ((BIT_TIME * 9) + BIT_TIME_HALVE)
+static uint32_t BIT_TICKS;       //
+static uint32_t START_BIT_TICKS; // BIT_TIME_3_4)
+
+static void Init_Baudrate(uint8_t baud_idx)
+{
+    uint32_t cpuClockFrequency;
+    uint32_t baud;
+	
+// copied from system.c
+#if defined(USE_HAL_DRIVER)
+    cpuClockFrequency = HAL_RCC_GetSysClockFreq();
+#else
+    RCC_ClocksTypeDef clocks;
+    RCC_GetClocksFreq(&clocks);
+    cpuClockFrequency = clocks.SYSCLK_Frequency;
+#endif
+
+    switch(baud_idx){
+        case 1:
+            baud = 19200;
+            break;
+        case 2:
+            baud = 38400;
+            break;
+        case 3:
+            baud = 57600;
+            break;
+        case 6:
+            baud = 115200;
+            break;
+        default:
+            baud = 19200;
+    }
+    BIT_TICKS = cpuClockFrequency / baud;
+    START_BIT_TICKS = (BIT_TICKS >> 1) + (BIT_TICKS >> 2);
+}
 
 static uint8_t suart_getc_(uint8_t *bt)
 {
@@ -87,20 +120,20 @@ static uint8_t suart_getc_(uint8_t *bt)
         }
     }
     // start bit
-    start_time = micros();
-    btime = start_time + START_BIT_TIME;
+    start_time = getCycleCounter();
+    btime = START_BIT_TICKS;
     uint16_t bitmask = 0;
     uint8_t bit = 0;
-    while (micros() < btime);
+    while ((getCycleCounter() - start_time) < btime);
     while (1) {
         if (ESC_IS_HI)
         {
             bitmask |= (1 << bit);
         }
-        btime = btime + BIT_TIME;
+        btime = btime + BIT_TICKS;
         bit++;
         if (bit == 10) break;
-        while (micros() < btime);
+        while ((getCycleCounter() - start_time) < btime);
     }
     // check start bit and stop bit
     if ((bitmask & 1) || (!(bitmask & (1 << 9)))) {
@@ -114,7 +147,8 @@ static void suart_putc_(uint8_t *tx_b)
 {
     // shift out stopbit first
     uint16_t bitmask = (*tx_b << 2) | 1 | (1 << 10);
-    uint32_t btime = micros();
+    uint32_t btime = 0;
+    uint32_t start_time = getCycleCounter();
     while (1) {
         if (bitmask & 1) {
             ESC_SET_HI; // 1
@@ -122,10 +156,10 @@ static void suart_putc_(uint8_t *tx_b)
         else {
             ESC_SET_LO; // 0
         }
-        btime = btime + BIT_TIME;
+        btime = btime + BIT_TICKS;
         bitmask = (bitmask >> 1);
         if (bitmask == 0) break; // stopbit shifted out - but don't wait
-        while (micros() < btime);
+        while ((getCycleCounter() - start_time) < btime);
     }
 }
 
@@ -202,6 +236,7 @@ uint8_t BL_ConnectEx(uint8_32_u *pDeviceInfo)
     //DeviceInfo.dword=0; is set before
     uint8_t BootInfo[9];
     uint8_t BootMsg[BootMsgLen-1] = "471";
+    Init_Baudrate(1); // initial 19200 baud
     // x * 0 + 9
 #if defined(USE_SERIAL_4WAY_SK_BOOTLOADER)
     uint8_t BootInit[] = {0,0,0,0,0,0,0,0,0,0,0,0,0x0D,'B','L','H','e','l','i',0xF4,0x7D};
@@ -245,6 +280,17 @@ uint8_t BL_SendCMDKeepAlive(void)
         return 0;
     }
     return 1;
+}
+
+uint8_t BL_SendCMDSetBaudRate(uint8_t baud_idx)
+{
+    uint8_t sCMD[] = {CMD_SET_BAUD_RATE, baud_idx};
+    BL_SendBuf(sCMD, 2);
+    if (BL_GetACK(2) == brSUCCESS) {
+        Init_Baudrate(baud_idx);
+        return 1;
+    }
+    return 0;
 }
 
 void BL_SendCMDRunRestartBootloader(uint8_32_u *pDeviceInfo)
